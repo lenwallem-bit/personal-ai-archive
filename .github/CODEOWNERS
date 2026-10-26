@@ -1,0 +1,7 @@
+# Core profile and governance changes need the owner's explicit task authorization.
+/identity/ @lenwallem-bit
+/AGENTS.md @lenwallem-bit
+/archive-manifest.json @lenwallem-bit
+/.github/ @lenwallem-bit
+/scripts/ @lenwallem-bit
+

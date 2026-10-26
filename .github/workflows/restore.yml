@@ -1,0 +1,48 @@
+name: Restore archive snapshot
+on:
+  workflow_dispatch:
+    inputs:
+      target_sha:
+        description: Full 40-character SHA from this repository's main history
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+  checks: read
+
+concurrency:
+  group: archive-restore
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Use the current trusted recovery code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Restore through a checked pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ inputs.target_sha }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          sys.path.insert(0, 'scripts')
+          from archive import GitHub, DEFAULT_REPO, restore_archive
+          from complete_pr import finish
+          api = GitHub(DEFAULT_REPO)
+          result = restore_archive(api, os.environ['TARGET_SHA'], publish=True)
+          print(json.dumps(result, ensure_ascii=False))
+          if result['status'] == 'pull-request':
+              result = finish(api, result['number'], result.get('commit'), 360, True)
+              print(json.dumps(result, ensure_ascii=False))
+              if result['status'] not in {'merged', 'already-merged'}:
+                  raise SystemExit('Recovery PR remains open: ' + result['status'])
+          PY

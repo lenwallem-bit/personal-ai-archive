@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "repository": "lenwallem-bit/personal-ai-archive",
+  "default_branch": "main",
+  "visibility": "public",
+  "encoding": "UTF-8",
+  "content_format": "Markdown",
+  "read_order": [
+    "AGENTS.md",
+    "identity/profile.md",
+    "workflow/preferences.md",
+    "memory/README.md"
+  ],
+  "core_directories": ["identity", "workflow", "memory", "skills", "archive"],
+  "automatic_write": {
+    "operation": "add_only",
+    "paths": ["memory/entries/*.md"],
+    "required_fields": ["schema_version", "event_id", "kind", "title", "summary", "source", "confirmed", "visibility", "approved_for_public", "occurred_at"],
+    "required_values": {"schema_version": 1, "confirmed": true, "visibility": "public", "approved_for_public": true},
+    "optional_fields": ["supersedes", "body"],
+    "kinds": ["preference", "experience", "decision", "skill", "project"],
+    "merge_route": "pull_request_with_required_checks",
+    "direct_main_write": false,
+    "deduplication": "event_id_and_canonical_content_sha256"
+  },
+  "manual_or_explicitly_authorized_edit": ["identity/", "workflow/", "skills/", "archive/", "memory/preferences.md", "memory/decisions.md", "memory/lessons.md", "AGENTS.md", "scripts/", ".github/"],
+  "limits": {"markdown_file_bytes": 65536, "snapshot_bytes": 2097152, "repository_files": 1000},
+  "conflicts": "Refuse the same event_id with different content; create a new event with supersedes instead.",
+  "rollback": "New pull request restoring the five archive directories to an ancestor commit; no history rewriting.",
+  "privacy": "Only explicit public-approved data may enter GitHub. Private candidates remain outside this repository.",
+  "platform_status": "Adapters require an authorized tool-capable runtime; this manifest does not activate native platform memory synchronization."
+}

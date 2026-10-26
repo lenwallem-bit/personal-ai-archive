@@ -1,0 +1,36 @@
+name: Archive validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: archive-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  archive-validation:
+    name: archive-validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out exact revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Test privacy, conflict, and recovery guards
+        run: python3 -m unittest discover -s tests -v
+      - name: Validate public archive
+        run: python3 scripts/archive.py validate
+      - name: Restrict automated memory proposals to additions
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'memory/')
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python3 scripts/archive.py validate --base "$BASE_SHA"
+
