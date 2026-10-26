@@ -1,6 +1,6 @@
 # AI-READONLY: 个人 AI 档案入口
 
-这个仓库使用普通 UTF-8 Markdown 保存可公开的个人档案，让不同 AI 和设备读取同一份经过确认的信息。仓库地址为 [lenwallem-bit/personal-ai-archive](https://github.com/lenwallem-bit/personal-ai-archive)。实际部署和验证状态见交付报告。
+这个仓库使用普通 UTF-8 Markdown 保存可公开的个人档案，让不同 AI 和设备读取同一份经过确认的信息。仓库地址为 [lenwallem-bit/personal-ai-archive](https://github.com/lenwallem-bit/personal-ai-archive)。实际部署和验证状态见 [交付报告](DELIVERY.md)。
 
 初始文件是模板。`{{占位符}}` 表示尚未填写，`template` 和 `unknown` 表示没有足够信息；AI 不得将它们当成事实，也不得从其他聊天自动补入私人资料。
 
@@ -9,6 +9,7 @@
 1. 阅读 [快速接入指南](QUICKSTART.md)，复制其中的通用提示词。
 2. AI 依次读取 [AGENTS.md](AGENTS.md)、[archive-manifest.json](archive-manifest.json)、[个人身份](identity/profile.md) 和 [工作偏好](workflow/preferences.md)，再按任务需要读取其余文件。
 3. 各平台的读取、写入和自动同步边界见 [ai-integration.md](ai-integration.md)。能访问仓库不等于平台会持续同步。
+4. DSH 的任务前后命令、状态判断与恢复入口见 [DSH 接入说明](DSH.md)。
 
 ## 目录说明
 

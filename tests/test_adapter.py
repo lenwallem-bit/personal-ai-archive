@@ -8,7 +8,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from archive import ArchiveError, digest, render_event
 from complete_pr import finish, scoped_pull_request
-from dsh_adapter import atomic_json, atomic_text, before_task
+from dsh_adapter import atomic_json, atomic_text, before_task, event_lock
 
 SHA = 'a' * 40
 EVENT = {
@@ -45,6 +45,16 @@ class FakeAPI:
 
 
 class AdapterTests(unittest.TestCase):
+    def test_event_lock_prevents_overwrite_and_is_released(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = Path(tmp)
+            with event_lock(state, 'same-event'):
+                with self.assertRaises(ArchiveError):
+                    with event_lock(state, 'same-event'):
+                        self.fail('Concurrent event lock was admitted')
+            with event_lock(state, 'same-event'):
+                pass
+
     def test_changed_head_never_merges(self):
         api = FakeAPI('success')
         with self.assertRaises(ArchiveError):

@@ -511,10 +511,22 @@ def existing_content(api: GitHub, path: str, ref: str) -> str | None:
         raise ArchiveError("Invalid existing memory content") from exc
 
 
-def find_pr(api: GitHub, branch: str):
+def branch_pr_history(api: GitHub, branch: str) -> list:
     owner = api.repo.split("/")[0]
-    prs = api.request("GET", "/pulls?state=all&head=" + quote(owner + ":" + branch) + "&base=main&per_page=100")
-    return next((p for p in prs if p.get("head", {}).get("ref") == branch and p.get("base", {}).get("ref") == "main"), None)
+    endpoint = "/pulls?state=all&head=" + quote(owner + ":" + branch) + "&base=main&per_page=100"
+    history = []
+    for page in range(1, 11):
+        prs = api.request("GET", endpoint if page == 1 else endpoint + "&page=" + str(page))
+        if not isinstance(prs, list):
+            raise ArchiveError("Cannot verify proposal history")
+        history.extend(p for p in prs if p.get("head", {}).get("ref") == branch and p.get("base", {}).get("ref") == "main")
+        if len(prs) < 100:
+            return history
+    raise ArchiveError("Proposal history exceeds verification limit; keep the candidate local")
+
+
+def find_pr(api: GitHub, branch: str):
+    return next(iter(branch_pr_history(api, branch)), None)
 
 
 def pr_summary(pr: dict, commit: str | None = None) -> dict:
@@ -544,6 +556,14 @@ def propose_event(api: GitHub, value: object, publish: bool = False) -> dict:
         if current != text:
             raise ArchiveError("event_id already exists on main with different content")
         return {"status": "already-present", "path": path, "commit": base["sha"], "content_sha256": content_hash}
+    # A restore or deletion is a deliberate state transition. Historical success
+    # must never be mistaken for current presence or used to reinsert a revoked event.
+    history = branch_pr_history(api, branch)
+    if any(pr.get("merged_at") or pr.get("merged") is True for pr in history):
+        raise ArchiveError("This event_id was previously merged and later removed from main; keep the candidate local. A new event_id requires new authorization")
+    if any(pr.get("state") == "closed" for pr in history):
+        raise ArchiveError("This event_id has a previously closed unmerged PR; keep the candidate local. Automatic reopening or reinsertion is not allowed")
+    pr = next((item for item in history if item.get("state") == "open"), None)
     ref = api.request("GET", "/git/ref/heads/" + quote(branch), missing_ok=True)
     if ref is not None:
         branch_sha = ref["object"]["sha"]
@@ -553,11 +573,12 @@ def propose_event(api: GitHub, value: object, publish: bool = False) -> dict:
         changes = comparison.get("files", [])
         if len(changes) != 1 or changes[0].get("filename") != path or changes[0].get("status") != "added":
             raise ArchiveError("Existing proposal branch contains unrelated changes")
-        pr = find_pr(api, branch)
         if pr is None:
             pr = api.request("POST", "/pulls", {"title": "memory: " + e["event_id"], "head": branch,
                 "base": "main", "body": "新增已确认且允许公开的单条记忆。\n\nContent SHA256: " + content_hash})
         return pr_summary(pr, branch_sha)
+    if pr is not None:
+        raise ArchiveError("An open proposal exists but its branch is missing; keep the candidate local instead of recreating it")
     return make_proposal(api, base, branch,
         [{"path": path, "mode": "100644", "type": "blob", "content": text}],
         "memory: " + e["event_id"], "新增已确认且允许公开的单条记忆。\n\nContent SHA256: " + content_hash)
@@ -701,4 +722,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     raise SystemExit(main())
