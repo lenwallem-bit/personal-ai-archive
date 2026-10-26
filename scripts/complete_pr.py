@@ -53,6 +53,9 @@ def scoped_pull_request(api, number, expected_sha=None):
             path = item.get("filename", "")
             if path.split("/", 1)[0] not in CORE_DIRS or not path.endswith(".md"):
                 raise ArchiveError("Restore changes must remain within the five archive directories")
+            old_path = item.get("previous_filename")
+            if old_path and (old_path.split("/", 1)[0] not in CORE_DIRS or not old_path.endswith(".md")):
+                raise ArchiveError("Restore must not rename files from outside the archive directories")
     else:
         raise ArchiveError("This finisher only merges memory or restore proposals")
     return pr
@@ -124,5 +127,8 @@ def main():
 
 
 if __name__ == "__main__":
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     raise SystemExit(main())
 

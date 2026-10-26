@@ -176,6 +176,7 @@ class ApiTests(unittest.TestCase):
         pr = {'number': 1, 'html_url': 'https://github.com/example/repo/pull/1', 'state': 'open'}
         api = FakeAPI({('GET', '/commits/main'): commit(),
             ('GET', '/contents/memory%2Fentries%2Ftest-public-event.md?ref=' + SHA): None,
+            ('GET', '/pulls?state=all&head=lenwallem-bit%3Amemory%2Ftest-public-event&base=main&per_page=100'): [],
             ('GET', '/git/ref/heads/memory%2Ftest-public-event'): None,
             ('POST', '/git/trees'): {'sha': OLD_TREE},
             ('POST', '/git/commits'): {'sha': BRANCH},
@@ -188,6 +189,28 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(mutations[1][2]['parents'], [SHA])
         self.assertEqual(mutations[2][2]['ref'], 'refs/heads/memory/test-public-event')
         self.assertFalse(any(x[0] in ('PATCH', 'PUT', 'DELETE') for x in mutations))
+
+    def test_removed_previously_merged_event_is_not_reinserted_or_reported_present(self):
+        historical = {'number': 1, 'state': 'closed', 'merged_at': '2026-10-26T12:30:00Z',
+                      'head': {'ref': 'memory/test-public-event'}, 'base': {'ref': 'main'}}
+        api = FakeAPI({('GET', '/commits/main'): commit(),
+            ('GET', '/contents/memory%2Fentries%2Ftest-public-event.md?ref=' + SHA): None,
+            ('GET', '/pulls?state=all&head=lenwallem-bit%3Amemory%2Ftest-public-event&base=main&per_page=100'): [historical]})
+        with self.assertRaisesRegex(archive.ArchiveError, 'previously merged and later removed'):
+            archive.propose_event(api, event(), True)
+        self.assertTrue(all(x[0] == 'GET' for x in api.calls))
+        self.assertFalse(any('/git/ref/' in x[1] for x in api.calls))
+
+    def test_closed_unmerged_event_is_not_automatically_reopened(self):
+        historical = {'number': 2, 'state': 'closed', 'merged_at': None,
+                      'head': {'ref': 'memory/test-public-event'}, 'base': {'ref': 'main'}}
+        api = FakeAPI({('GET', '/commits/main'): commit(),
+            ('GET', '/contents/memory%2Fentries%2Ftest-public-event.md?ref=' + SHA): None,
+            ('GET', '/pulls?state=all&head=lenwallem-bit%3Amemory%2Ftest-public-event&base=main&per_page=100'): [historical]})
+        with self.assertRaisesRegex(archive.ArchiveError, 'previously closed unmerged PR'):
+            archive.propose_event(api, event(), True)
+        self.assertTrue(all(x[0] == 'GET' for x in api.calls))
+        self.assertFalse(any('/git/ref/' in x[1] for x in api.calls))
 
     def test_read_uses_immutable_blob_snapshot(self):
         routes = {('GET', '/commits/main'): commit()}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -28,6 +29,37 @@ def atomic_text(path, text):
     with tmp.open("x", encoding="utf-8", newline="\n") as stream:
         stream.write(text)
     os.replace(tmp, path)
+
+
+@contextmanager
+def event_lock(state, event_id):
+    """OS advisory lock: released on process exit, no stale lock-file deletion."""
+    path = state / "locks" / (event_id + ".lock")
+    if is_link(path) or any(is_link(p) for p in path.parents):
+        raise ArchiveError("Event locks must not use symlinks or junctions")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a+b") as stream:
+        if stream.seek(0, 2) == 0:
+            stream.write(b"0")
+            stream.flush()
+        stream.seek(0)
+        try:
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            raise ArchiveError("This event_id is being processed; retry the same input later") from None
+        try:
+            yield
+        finally:
+            if os.name == "nt":
+                stream.seek(0)
+                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
 
 
 def before_task(api, state):
@@ -57,6 +89,12 @@ def before_task(api, state):
 
 def after_task(api, state, event_path, merge=True, wait_seconds=180):
     event = normalize_event(load_json(event_path))
+    event_id = event["event_id"]
+    with event_lock(state, event_id):
+        return publish_locked_event(api, state, event, merge, wait_seconds)
+
+
+def publish_locked_event(api, state, event, merge, wait_seconds):
     event_id = event["event_id"]
     queue = state / "pending" / (event_id + ".json")
     if queue.exists() and normalize_event(load_json(queue)) != event:
@@ -111,5 +149,8 @@ def main():
 
 
 if __name__ == "__main__":
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     raise SystemExit(main())
 
